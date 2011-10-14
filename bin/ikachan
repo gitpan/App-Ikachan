@@ -1,0 +1,247 @@
+#!/usr/bin/env perl
+use strict;
+use warnings;
+use 5.008001;
+use File::Spec;
+use File::Basename;
+use lib File::Spec->catdir(dirname(__FILE__), '..', 'lib');
+
+use AnySan;
+use AnySan::Provider::IRC;
+use Getopt::Long ();
+use Pod::Usage;
+use Plack::Builder;
+use Plack::Request;
+use Plack::Response;
+use Twiggy::Server;
+
+my $parser = Getopt::Long::Parser->new(
+    config => [ "no_ignore_case", "pass_through" ],
+);
+
+my %options;
+my($http_host, $http_port, $irc_server, $irc_port, $irc_keyword, $irc_nickname, $no_post_with_join) =
+    ('127.0.0.1', 4979, undef, 6667, undef, 'ikachan', 0);
+$parser->getoptions(
+    'o|host=s'     => \$http_host,
+    'p|port=i'     => \$http_port,
+    'S|Server=s'   => \$irc_server,
+    'P|Port=i'     => \$irc_port,
+    'K|Keyword=s'  => \$irc_keyword,
+    'N|Nickname=s' => \$irc_nickname,
+    'j|no-post-with-join' => \$no_post_with_join,
+    'h|help'       => \$options{help},
+    'v|version'    => \$options{version},
+);
+pod2usage(1) if $options{help};
+die "Missing mandatory parameter: irc_server" unless defined $irc_server;
+
+warn 'connecting to ' . join ' ', ($irc_server, $irc_port, ($irc_keyword || ''), $irc_nickname);
+
+my $irc = irc $irc_server,
+    key      => $irc_server,
+    port     => $irc_port,
+    password => $irc_keyword,
+    nickname => $irc_nickname,
+    channels => {
+    };
+
+sub rendar {
+    my($code, $msg) = @_;
+    my $res = Plack::Response->new($code);
+    $res->content_type('text/plain');
+    $res->content_length(length $msg);
+    $res->body($msg);
+    $res->finalize;
+}
+
+my $channels = {};
+sub join_channel {
+    my $channel = shift;
+    $irc->join_channel($channel);
+    $channels->{$channel} = {
+        join_at => time(),
+    };
+}
+
+my $code = sub {
+    my $req = Plack::Request->new(shift);
+    my $method = $req->method;
+    my $path   = $req->path;
+
+    if ($method eq 'GET') {
+        if ($path eq '/channel_list') {
+            my $list = [ keys %{ $channels } ];
+            return rendar(200, join("\n", @$list));
+        } elsif ($path eq '/') {
+            my $base = $req->base;
+            my $html =<<HTML;
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="UTF-8">
+        <title>ikachan</title>
+    <head>
+    <body>
+        <h1>ikachan</h1>
+
+        <h2>join channel list</h2>
+        <iframe src="/channel_list"></iframe>
+
+        <h2>API usage</u2>
+
+        <h3>channel join</h3>
+        <section>
+            <table border="1">
+                <tr><td>method</td><td>POST</td></tr>
+                <tr><td>url</td><td>${base}join</td></tr>
+                <tr><td>form params</td><td>channel=#channel</td></tr>
+            </table>
+            <h4>testing form</h4>
+            <form action="/join" method="post">
+                join channel: <input name="channel" /><input type="submit" value="join" />
+            </form>
+        <section>
+
+        <section>
+            <h3>channel leave</h3>
+            <table border="1">
+                <tr><td>method</td><td>POST</td></tr>
+                <tr><td>url</td><td>${base}leave</td></tr>
+                <tr><td>form params</td><td>channel=#channel</td></tr>
+            </table>
+            <form action="/leave" method="post">
+                leave channel: <input name="channel" /><input type="submit" value="leave" />
+            </form>
+        <section>
+
+        <section>
+            <h3>sent notice message to channel</h3>
+            <table border="1">
+                <tr><td>method</td><td>POST</td></tr>
+                <tr><td>url</td><td>${base}notice</td></tr>
+                <tr><td>form params</td><td>channel=#channel&message=your_message</td></tr>
+            </table>
+            <form action="/notice" method="post">
+                channel: <input name="channel" /><br />
+                message: <input name="message" /><input type="submit" value="post" />
+            </form>
+        </section>
+
+        <section>
+            <h3>sent privmsg message to channel</h3>
+            <table border="1">
+                <tr><td>method</td><td>POST</td></tr>
+                <tr><td>url</td><td>${base}privmsg</td></tr>
+                <tr><td>form params</td><td>channel=#channel&message=your_message</td></tr>
+            </table>
+            <form action="/privmsg" method="post">
+                channel: <input name="channel" /><br />
+                message: <input name="message" /><input type="submit" value="post" />
+            </form>
+        </section>
+    </body>
+</html>
+HTML
+
+            my $res = Plack::Response->new(200);
+            $res->content_type('text/html; charset=utf-8');
+            $res->content_length(length $html);
+            $res->body($html);
+            return $res->finalize;
+        }
+    } elsif ($method eq 'POST') {
+        my $channel = $req->param('channel');
+
+        if ($path eq '/join') {
+            return rendar(403, "joinned channel: $channel") if $channels->{$channel};
+            join_channel($channel);
+            return rendar(200, "join success channel: $channel");
+        } elsif ($path eq '/leave' || $path eq '/part') {
+            return rendar(404, "not joinned channel: $channel") unless $channels->{$channel};
+            $irc->leave_channel($channel);
+            delete $channels->{$channel};
+            return rendar(200, "leave success channel: $channel");
+        } elsif ($path eq '/notice') {
+            if ($no_post_with_join) {
+                return rendar(404, "not joinned channel: $channel") unless $channels->{$channel};
+            } elsif (not $channels->{$channel}) {
+                join_channel($channel);
+            }
+            my $message = $req->param('message');
+            $irc->send_message( $message, channel => $channel );
+            return rendar(200, "message sent channel: $channel $message");
+        } elsif ($path eq '/privmsg') {
+            if ($no_post_with_join) {
+                return rendar(404, "not joinned channel: $channel") unless $channels->{$channel};
+            } elsif (not $channels->{$channel}) {
+                join_channel($channel);
+            }
+            my $message = $req->param('message');
+            $irc->send_message( $message, channel => $channel, privmsg => 1 );
+            return rendar(200, "message sent channel: $channel $message");
+        }
+    }
+
+    return rendar(404, 'not found');
+};
+
+my $app = builder {
+    enable 'Plack::Middleware::AccessLog', format => 'combined';
+    $code;
+};
+
+warn "starting httpd: http://$http_host:$http_port/";
+my $twiggy = Twiggy::Server->new(
+    host => $http_host,
+    port => $http_port,
+);
+$twiggy->register_service($app);
+
+AnySan->run;
+
+__END__
+
+=head1 NAME
+
+ikachan - IRC message delivery by HTTP
+
+=head1 SYNOPSIS
+
+  # connect to chat.freenode.net
+  ikachan -S chat.freenode.net
+
+=head1 OPTIONS
+
+=over 4
+
+=item -o, --host
+
+The interface a TCP based server daemon binds to. Defauts to undef,
+which lets most server backends bind the any (*) interface. This
+option doesn't mean anything if the server does not support TCP
+socket.
+
+=item -p, --port (default: 4979)
+
+The port number a TCP based server daemon listens on. Defaults to
+5000. This option doesn't mean anything if the server does not support
+TCP socket.
+
+=item -S, --Server
+
+irc server address.
+
+=item -P, --Port (default: 6667)
+
+irc server port.
+
+=item -K, --Keyword
+
+=item -N, --Nickname
+
+=item -j, --no-post-with-join
+
+=back
+
+=cut
