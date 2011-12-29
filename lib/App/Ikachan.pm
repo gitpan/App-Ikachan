@@ -1,7 +1,7 @@
 package App::Ikachan;
 use strict;
 use warnings;
-our $VERSION = '0.03';
+our $VERSION = '0.04';
 
 1;
 __END__
@@ -43,6 +43,10 @@ irc server port.
 =item -K, --Keyword
 
 =item -N, --Nickname
+
+=item -i, --interval
+
+irc post interval. for Excess Flood
 
 =item -j, --no-post-with-join
 
