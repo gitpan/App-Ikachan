@@ -1,7 +1,7 @@
 package App::Ikachan;
 use strict;
 use warnings;
-our $VERSION = '0.05';
+our $VERSION = '0.06';
 
 1;
 __END__
@@ -42,7 +42,17 @@ irc server port.
 
 =item -K, --Keyword
 
+irc server password
+
 =item -N, --Nickname
+
+irc nickname
+
+=item -r, --reverse-proxy
+
+treat X-Forwarded-For as REMOTE_ADDR if REMOTE_ADDR match this argument.
+
+see L<Plack::Middleware::ReverseProxy>.
 
 =item -i, --interval
 
@@ -50,6 +60,21 @@ irc post interval. for Excess Flood
 
 =item -j, --no-post-with-join
 
+disable to irc message post with channel join
+
 =back
+
+=head1 AUTHOR
+
+Kazuhiro Osawa E<lt>yappo {at} shibuya {dot} plE<gt>
+
+=head1 SEE ALSO
+
+L<AnySan::Provider::IRC>, L<Twiggy>
+
+=head1 LICENSE
+
+This library is free software; you can redistribute it and/or modify
+it under the same terms as Perl itself.
 
 =cut
