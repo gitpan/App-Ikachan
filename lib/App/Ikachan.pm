@@ -1,7 +1,7 @@
 package App::Ikachan;
 use strict;
 use warnings;
-our $VERSION = '0.07';
+our $VERSION = '0.08';
 
 1;
 __END__
@@ -57,6 +57,11 @@ see L<Plack::Middleware::ReverseProxy>.
 =item -i, --interval
 
 irc post interval. for Excess Flood
+
+=item -R, --reconnect-interval
+
+interval of reconnect to irc server.
+exit application if interval == 0.
 
 =item -j, --no-post-with-join
 
