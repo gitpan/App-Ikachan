@@ -1,7 +1,7 @@
 package App::Ikachan;
 use strict;
 use warnings;
-our $VERSION = '0.08';
+our $VERSION = '0.09';
 
 1;
 __END__
@@ -47,6 +47,10 @@ irc server password
 =item -N, --Nickname
 
 irc nickname
+
+=item -U, --User
+
+irc user name
 
 =item -r, --reverse-proxy
 
