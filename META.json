@@ -35,7 +35,7 @@
       },
       "runtime" : {
          "requires" : {
-            "AnySan" : "0.09",
+            "AnySan" : "0.10",
             "Plack::Builder::Conditionals" : "0",
             "Plack::Middleware::ReverseProxy" : "0",
             "Twiggy" : "0"
@@ -53,5 +53,5 @@
          "url" : "git://github.com/yappo/p5-App-Ikachan.git"
       }
    },
-   "version" : "0.11"
+   "version" : "0.12"
 }
