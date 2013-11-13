@@ -16,18 +16,21 @@ use Plack::Request;
 use Plack::Response;
 use Twiggy::Server;
 
+use App::Ikachan;
+
 my $parser = Getopt::Long::Parser->new(
     config => [ "no_ignore_case", "pass_through" ],
 );
 
 my %options;
-my($http_host, $http_port, $irc_server, $irc_port, $irc_keyword, $irc_nickname, $irc_user, $no_post_with_join, $irc_post_interval, $irc_reconnect_interval, $enable_ssl) =
-    ('127.0.0.1', 4979, undef, 6667, undef, 'ikachan', undef, 0, 2, 3, 0);
+my($http_host, $http_port, $irc_server, $irc_port, $irc_keyword, $irc_nickname, $irc_user, $no_post_with_join, $irc_post_interval, $irc_reconnect_interval, $enable_ssl, $mount) =
+    ('127.0.0.1', 4979, undef, 6667, undef, 'ikachan', undef, 0, 2, 3, 0, '');
 my @reverse_proxy;
 $parser->getoptions(
     'o|host=s'     => \$http_host,
     'p|port=i'     => \$http_port,
     'r|reverse-proxy=s' => \@reverse_proxy,
+    'm|mount=s'    => \$mount,
     'S|Server=s'   => \$irc_server,
     'P|Port=i'     => \$irc_port,
     'K|Keyword=s'  => \$irc_keyword,
@@ -131,15 +134,15 @@ my $code = sub {
             my $list = [ keys %{ $join_channels } ];
             return rendar(200, join("\n", @$list));
         } elsif ($path eq '/') {
-            my $base = $req->base;
             my $logo = get_logo();
             my $css = get_css();
+            my $base_path = $mount ? "/$mount" : '';
             my $html =<<HTML;
 <!DOCTYPE html>
 <html>
     <head>
         <meta charset="UTF-8">
-        <title>ikachan</title>
+        <title>ikachan $App::Ikachan::VERSION</title>
         <style>
             ${css}
 
@@ -150,11 +153,12 @@ my $code = sub {
         <div class="row"><div class="span12">
         <h1>
             ikachan
+            $App::Ikachan::VERSION
             <img src="data:image/png;base64,${logo}" />
         </h1>
 
         <h2>join channel list</h2>
-        <iframe src="/channel_list"></iframe>
+        <iframe src="$base_path/channel_list"></iframe>
 
         <h2>API usage</u2>
 
@@ -162,11 +166,11 @@ my $code = sub {
         <section>
             <table class="table table-bordered">
                 <tr><td>method</td><td>POST</td></tr>
-                <tr><td>url</td><td>${base}join</td></tr>
+                <tr><td>url</td><td>$base_path/join</td></tr>
                 <tr><td>form params</td><td>channel=#channel&channel_keyword=keyword</td></tr>
             </table>
             <h4>testing form</h4>
-            <form action="/join" method="post">
+            <form action="$base_path/join" method="post">
                 join channel: <input name="channel" /><br />
                 channel keyword(option): <input name="channel_keyword" /><input type="submit" value="join" class="btn" />
             </form>
@@ -176,10 +180,10 @@ my $code = sub {
             <h3>channel leave</h3>
             <table class="table table-bordered">
                 <tr><td>method</td><td>POST</td></tr>
-                <tr><td>url</td><td>${base}leave</td></tr>
+                <tr><td>url</td><td>$base_path/leave</td></tr>
                 <tr><td>form params</td><td>channel=#channel</td></tr>
             </table>
-            <form action="/leave" method="post">
+            <form action="$base_path/leave" method="post">
                 leave channel: <input name="channel" /><input type="submit" value="leave" class="btn" />
             </form>
         <section>
@@ -188,10 +192,10 @@ my $code = sub {
             <h3>sent notice message to channel</h3>
             <table class="table table-bordered">
                 <tr><td>method</td><td>POST</td></tr>
-                <tr><td>url</td><td>${base}notice</td></tr>
+                <tr><td>url</td><td>$base_path/notice</td></tr>
                 <tr><td>form params</td><td>channel=#channel&message=your_message</td></tr>
             </table>
-            <form action="/notice" method="post">
+            <form action="$base_path/notice" method="post">
                 channel: <input name="channel" /><br />
                 message: <input name="message" /><input type="submit" value="post" class="btn" />
             </form>
@@ -201,10 +205,10 @@ my $code = sub {
             <h3>sent privmsg message to channel</h3>
             <table class="table table-bordered">
                 <tr><td>method</td><td>POST</td></tr>
-                <tr><td>url</td><td>${base}privmsg</td></tr>
+                <tr><td>url</td><td>$base_path/privmsg</td></tr>
                 <tr><td>form params</td><td>channel=#channel&message=your_message</td></tr>
             </table>
-            <form action="/privmsg" method="post">
+            <form action="$base_path/privmsg" method="post">
                 channel: <input name="channel" /><br />
                 message: <input name="message" />
                 <input type="submit" value="post" class="btn" />
@@ -263,10 +267,10 @@ my $app = builder {
         enable match_if addr(\@reverse_proxy), 'Plack::Middleware::ReverseProxy';
     }
     enable 'Plack::Middleware::AccessLog', format => 'combined';
-    $code;
+    mount "/$mount" => $code;
 };
 
-warn "starting httpd: http://$http_host:$http_port/";
+warn "starting httpd: http://$http_host:$http_port/$mount";
 my $twiggy = Twiggy::Server->new(
     host => $http_host,
     port => $http_port,
@@ -6512,6 +6516,10 @@ exit application if interval == 0.
 =item -j, --no-post-with-join
 
 disable to irc message post with channel join
+
+=item -m, --mount
+
+provide TCP based server daemon with path. Default do nothing.
 
 =back
 

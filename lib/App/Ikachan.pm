@@ -1,7 +1,7 @@
 package App::Ikachan;
 use strict;
 use warnings;
-our $VERSION = '0.12';
+our $VERSION = 'v0.2.0';
 
 1;
 __END__
@@ -68,6 +68,10 @@ exit application if interval == 0.
 =item -j, --no-post-with-join
 
 disable to irc message post with channel join
+
+=item -m, --mount
+
+provide TCP based server daemon with path. Default do nothing.
 
 =back
 
